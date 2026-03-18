@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VetaCap — Reporte de Cartera</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy:    #021751;
+  --blue:    #1036E2;
+  --blue2:   #1a44f5;
+  --green:   #00C600;
+  --green2:  #00e000;
+  --white:   #FFFFFF;
+  --red:     #e63946;
+  --gold:    #c6a000;
+  --card-bg: rgba(255,255,255,0.045);
+  --border:  rgba(255,255,255,0.09);
+  --muted:   rgba(255,255,255,0.42);
+  --dim:     rgba(255,255,255,0.68);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Albert Sans',sans-serif;background:var(--navy);color:var(--white);min-height:100vh;overflow-x:hidden}
+
+/* BG */
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 90% 60% at 85% 5%,rgba(16,54,226,.3) 0%,transparent 55%),radial-gradient(ellipse 40% 50% at 5% 90%,rgba(0,198,0,.07) 0%,transparent 55%);pointer-events:none;z-index:0}
+.tri-bg{position:fixed;top:-80px;right:-80px;width:520px;height:520px;opacity:.5;pointer-events:none;z-index:0}
+.app{position:relative;z-index:1}
+
+/* TOPBAR */
+.topbar{background:rgba(2,23,81,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);padding:0 2.5rem;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-text{font-size:1.18rem;font-weight:800;letter-spacing:-.02em}
+.logo-text em{color:rgba(255,255,255,.5);font-style:normal;font-weight:400}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.topbar-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.pulse{width:7px;height:7px;background:var(--green);border-radius:50%;box-shadow:0 0 7px var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* LAYOUT */
+.main{max-width:1060px;margin:0 auto;padding:2.5rem 1.5rem}
+
+/* GLASS CARD */
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:18px;position:relative;overflow:hidden;backdrop-filter:blur(10px)}
+.card-accent::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:18px 18px 0 0}
+
+/* SECTION LABEL */
+.slabel{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:var(--green);display:flex;align-items:center;gap:10px;margin-bottom:1.1rem}
+.slabel::before{content:'';width:12px;height:2px;background:var(--green);flex-shrink:0}
+.slabel::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* IMPORT ZONE */
+.import-wrap{padding:1.8rem 2rem 1.4rem;margin-bottom:1.5rem}
+.import-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.dz{border:2px dashed rgba(255,255,255,.14);border-radius:14px;padding:1.4rem 1.2rem;text-align:center;cursor:pointer;transition:all .2s;position:relative;background:rgba(255,255,255,.02)}
+.dz:hover,.dz.over{border-color:var(--blue);background:rgba(16,54,226,.09)}
+.dz.ok{border-color:var(--green);background:rgba(0,198,0,.06)}
+.dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{font-size:1.8rem;margin-bottom:6px;display:block}
+.dz-tag{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:5px}
+.dz-tag.usd{color:#6fa3ff}.dz-tag.ars{color:var(--gold)}
+.dz-hint{font-size:.74rem;color:var(--muted)}
+.dz-file{font-size:.7rem;font-weight:600;color:var(--green);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px;margin-top:6px}
+.badge.ok{background:rgba(0,198,0,.13);color:var(--green)}
+.badge.err{background:rgba(230,57,70,.13);color:var(--red)}
+.import-note{font-size:.72rem;color:var(--muted)}
+.import-note b{color:var(--dim)}
+
+/* QUERY */
+.query-inner{padding:1.6rem 2rem}
+.query-title{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--green);margin-bottom:1.2rem;display:flex;align-items:center;gap:8px}
+.query-title::before{content:'';width:14px;height:2px;background:var(--green)}
+.qform{display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end}
+.field label{display:block;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:7px}
+.field input{width:100%;height:46px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.11);border-radius:11px;padding:0 14px;font-family:'Albert Sans',sans-serif;font-size:.88rem;font-weight:500;color:var(--white);outline:none;transition:all .2s}
+.field input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(16,54,226,.22);background:rgba(16,54,226,.09)}
+.field input::placeholder{color:var(--muted)}
+.btn-gen{height:46px;padding:0 1.8rem;background:var(--blue);color:#fff;border:none;border-radius:11px;font-family:'Albert Sans',sans-serif;font-size:.86rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .2s;white-space:nowrap;letter-spacing:.02em}
+.btn-gen:hover{background:var(--blue2);transform:translateY(-1px);box-shadow:0 8px 22px rgba(16,54,226,.38)}
+.btn-gen:disabled{opacity:.38;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* STATES */
+.loading{display:none;text-align:center;padding:4rem}
+.spinner{width:42px;height:42px;border:3px solid rgba(255,255,255,.09);border-top-color:var(--blue);border-right-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 1rem}
+.loading p{color:var(--muted);font-size:.85rem}
+.empty{text-align:center;padding:5rem 2rem;color:var(--muted)}
+.empty svg{width:68px;height:68px;margin:0 auto 1.4rem;display:block;opacity:.18}
+.empty p{font-size:.9rem;line-height:1.7}
+
+/* REPORT */
+#report{display:none}
+.actions{display:flex;justify-content:flex-end;gap:.9rem;margin-bottom:1.4rem}
+.btn-reset{height:40px;padding:0 1.3rem;background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:9px;font-family:'Albert Sans',sans-serif;font-size:.83rem;font-weight:500;cursor:pointer;transition:all .2s}
+.btn-reset:hover{border-color:rgba(255,255,255,.28);color:#fff}
+.btn-pdf{height:40px;padding:0 1.5rem;background:var(--green);color:var(--navy);border:none;border-radius:9px;font-family:'Albert Sans',sans-serif;font-size:.83rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .2s;letter-spacing:.02em}
+.btn-pdf:hover{background:var(--green2);transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,198,0,.32)}
+
+/* REPORT CONTENT */
+#rc{background:rgba(2,23,81,.72);border:1px solid var(--border);border-radius:18px;overflow:hidden;backdrop-filter:blur(20px)}
+
+/* REPORT HEADER */
+.rhead{background:linear-gradient(135deg,var(--blue) 0%,#010e35 100%);padding:2rem 2.5rem;display:flex;justify-content:space-between;align-items:flex-start;position:relative;overflow:hidden}
+.rhead::after,.rhead::before{content:'';position:absolute;border-radius:4px}
+.rhead::after{bottom:-50px;right:-50px;width:190px;height:190px;border:2px solid rgba(0,198,0,.18);transform:rotate(15deg)}
+.rhead::before{bottom:-20px;right:70px;width:130px;height:130px;border:2px solid rgba(255,255,255,.06);transform:rotate(15deg)}
+.rh-tag{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:var(--green);margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.rh-tag::before{content:'';width:14px;height:2px;background:var(--green);display:inline-block}
+.rh-name{font-size:2rem;font-weight:800;letter-spacing:-.025em;color:#fff;margin-bottom:8px;line-height:1.1}
+.rh-meta{display:flex;gap:18px;font-size:.76rem;color:rgba(255,255,255,.5);flex-wrap:wrap}
+.rh-meta b{color:rgba(255,255,255,.85);font-weight:600}
+.rh-right{text-align:right;position:relative;z-index:1;flex-shrink:0}
+.rh-plabel{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.38);margin-bottom:5px}
+.rh-pval{font-size:.96rem;font-weight:700;color:#fff;margin-bottom:10px}
+.rh-sub{font-size:.72rem;color:rgba(255,255,255,.36)}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:rgba(2,23,81,.5)}
+.tab{flex:1;padding:.9rem 1.4rem;background:transparent;border:none;color:var(--muted);font-family:'Albert Sans',sans-serif;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;transition:all .2s;border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:7px}
+.tab:hover{color:#fff;background:rgba(255,255,255,.03)}
+.tab.on{color:#fff;border-bottom-color:var(--blue);background:rgba(16,54,226,.07)}
+.tab.on.ars-t{border-bottom-color:var(--gold)}
+.tpill{font-size:.62rem;padding:2px 7px;border-radius:4px;font-weight:700;background:rgba(255,255,255,.07);color:var(--muted)}
+.tab.on .tpill.up{background:rgba(16,54,226,.28);color:#7fa7ff}
+.tab.on .tpill.ap{background:rgba(198,160,0,.28);color:#e8c840}
+.tc{display:none}.tc.on{display:block}
+
+/* BODY */
+.rbody{padding:1.8rem 2.5rem}
+
+/* SUMMARY CARDS */
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.8rem}
+.sc{background:var(--card-bg);border:1px solid var(--border);border-radius:13px;padding:1.1rem 1.2rem;position:relative;overflow:hidden;transition:border-color .2s}
+.sc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--blue)}
+.sc.cg::before{background:var(--green)}.sc.cr::before{background:var(--red)}.sc.cb::before{background:linear-gradient(90deg,var(--blue),var(--green))}.sc.co::before{background:var(--gold)}
+.sc:hover{border-color:rgba(255,255,255,.18)}
+.sc-l{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:9px}
+.sc-v{font-size:1rem;font-weight:800;color:#fff;word-break:break-all;line-height:1.2}
+.sc-s{font-size:.68rem;color:var(--muted);margin-top:5px}
+
+/* CHARTS */
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem;margin-bottom:1.8rem}
+.cbox{background:var(--card-bg);border:1px solid var(--border);border-radius:13px;padding:1.4rem}
+.cbox canvas{max-height:200px}
+
+/* PERF ROWS */
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-bottom:1.8rem}
+.pr{background:var(--card-bg);border:1px solid var(--border);border-radius:9px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;font-size:.82rem}
+.prl{color:var(--dim)}.prv{font-weight:700;color:#fff}
+.prv.pos{color:var(--green)}.prv.neg{color:var(--red)}.prv.neu{color:#6fa3ff}
+
+/* TABLES */
+.twrap{border-radius:13px;overflow:hidden;border:1px solid var(--border)}
+.ptable{width:100%;border-collapse:collapse;font-size:.8rem}
+.ptable thead tr{background:var(--blue)}
+.tc.ars-t .ptable thead tr{background:#7a5c00}
+.ptable thead th{padding:10px 12px;text-align:left;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:rgba(255,255,255,.82)}
+.ptable thead th.r,.ptable tbody td.r{text-align:right}
+.ptable tbody tr{border-bottom:1px solid var(--border)}
+.ptable tbody tr:nth-child(even){background:rgba(255,255,255,.018)}
+.ptable tbody tr:hover{background:rgba(16,54,226,.1)}
+.ptable tbody td{padding:9px 12px;color:var(--dim)}
+.ptable tbody td:first-child{color:#fff}
+.tkpill{background:rgba(16,54,226,.32);border:1px solid rgba(16,54,226,.48);color:#7fa7ff;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:5px;display:inline-block;letter-spacing:.04em}
+.ptable tfoot tr{background:var(--navy);border-top:2px solid var(--blue)}
+.ptable tfoot td{padding:11px 12px;font-weight:700;color:#fff;text-align:right}
+.ptable tfoot td:first-child{text-align:left;color:var(--green);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}
+.mtable{width:100%;border-collapse:collapse;font-size:.8rem}
+.mtable thead tr{background:rgba(16,54,226,.38)}
+.mtable thead th{padding:8px 12px;text-align:left;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:rgba(255,255,255,.65)}
+.mtable thead th.r{text-align:right}
+.mtable tbody tr{border-bottom:1px solid var(--border)}
+.mtable tbody td{padding:8px 12px;color:var(--dim);font-size:.78rem}
+.mtable tbody td.r{text-align:right;font-weight:600;color:#ff7b7b}
+.mtable tbody td.rpos{text-align:right;font-weight:600;color:var(--green)}
+
+/* DISCLAIMER */
+.disc{margin-top:1.8rem;padding:1.1rem 1.3rem;background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:9px;font-size:.68rem;color:var(--muted);line-height:1.6}
+.disc strong{color:var(--dim)}
+
+/* FOOTER */
+.rfooter{border-top:1px solid var(--border);padding:1.1rem 2.5rem;display:flex;justify-content:space-between;align-items:center}
+.rf-brand{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.rf-brand span{color:var(--blue)}
+.rf-tag{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--green)}
+
+/* MACRO NOTICE */
+.macro-notice{background:rgba(0,198,0,.07);border:1px solid rgba(0,198,0,.2);border-radius:8px;padding:.65rem 1rem;font-size:.72rem;color:rgba(0,198,0,.85);display:flex;align-items:center;gap:7px;margin-bottom:1rem}
+
+@media(max-width:700px){
+  .import-grid,.sgrid,.cgrid,.pgrid,.qform{grid-template-columns:1fr}
+  .sgrid{grid-template-columns:1fr 1fr 1fr}
+  .rhead{flex-direction:column;gap:1.2rem}
+  .rh-right{text-align:left}
+  .topbar,.main,.rbody{padding-left:1rem;padding-right:1rem}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- BG triangles -->
+<svg class="tri-bg" viewBox="0 0 520 520" fill="none">
+  <polygon points="260,20 500,480 20,480" stroke="rgba(16,54,226,0.15)" stroke-width="1" fill="none"/>
+  <polygon points="260,80 440,420 80,420" stroke="rgba(16,54,226,0.10)" stroke-width="1" fill="none"/>
+  <polygon points="260,150 380,360 140,360" stroke="rgba(0,198,0,0.08)" stroke-width="1" fill="none"/>
+  <polygon points="260,220 320,310 200,310" stroke="rgba(0,198,0,0.12)" stroke-width="1" fill="none"/>
+</svg>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1036E2"/><stop offset="100%" stop-color="#00C600"/></linearGradient></defs>
+      <polygon points="16,3 29,27 23,27 16,13 9,27 3,27" fill="url(#lg)"/>
+      <polygon points="16,13 23,27 20,27 16,19" fill="rgba(255,255,255,0.22)"/>
+    </svg>
+    <div class="logo-text">VETA<em>CAP</em></div>
+  </div>
+  <div class="topbar-right">
+    <span class="topbar-label">Reporte de Cartera</span>
+    <div class="pulse"></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- QUERY -->
+  <div class="card card-accent" style="margin-bottom:2rem">
+    <div class="query-inner">
+      <div class="query-title">Datos del Reporte</div>
+      <div class="qform">
+        <div class="field">
+          <label>Comitente</label>
+          <input type="text" id="inp-com" placeholder="Se carga desde el archivo" readonly>
+        </div>
+        <div class="field">
+          <label>Período</label>
+          <input type="text" id="inp-per" placeholder="Se carga desde el archivo" readonly>
+        </div>
+        <button class="btn-gen" id="btn-gen" onclick="generar()" disabled>▶ &nbsp;Generar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="card card-accent" style="margin-bottom:1.4rem">
+    <div class="import-wrap">
+      <div class="slabel">Importar Archivos</div>
+      <div class="import-grid">
+        <!-- USD -->
+        <div class="dz" id="dz-usd" onclick="document.getElementById('f-usd').click()"
+             ondragover="dov(event,'dz-usd')" ondragleave="dlv('dz-usd')" ondrop="drp(event,'usd')">
+          <input type="file" id="f-usd" accept=".xls,.xlsx" onchange="load(event,'usd')" onclick="event.stopPropagation()">
+          <span class="dz-icon" id="ic-usd">💵</span>
+          <div class="dz-tag usd">Análisis en Dólares (USD)</div>
+          <div class="dz-hint" id="ht-usd">Arrastrá o hacé click — .xls</div>
+          <div class="dz-file" id="fn-usd"></div>
+          <div id="st-usd"></div>
+        </div>
+        <!-- ARS -->
+        <div class="dz" id="dz-ars" onclick="document.getElementById('f-ars').click()"
+             ondragover="dov(event,'dz-ars')" ondragleave="dlv('dz-ars')" ondrop="drp(event,'ars')">
+          <input type="file" id="f-ars" accept=".xls,.xlsx" onchange="load(event,'ars')" onclick="event.stopPropagation()">
+          <span class="dz-icon" id="ic-ars">🪙</span>
+          <div class="dz-tag ars">Análisis en Pesos (ARS)</div>
+          <div class="dz-hint" id="ht-ars">Arrastrá o hacé click — .xls</div>
+          <div class="dz-file" id="fn-ars"></div>
+          <div id="st-ars"></div>
+        </div>
+      </div>
+      <div class="import-note">Formato: <b>Análisis de Inversión Global</b> — exportado desde el sistema de comitentes. La app limpia y recalcula automáticamente.</div>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Procesando y recalculando...</p>
+  </div>
+
+  <!-- EMPTY -->
+  <div class="empty" id="empty">
+    <svg viewBox="0 0 72 72" fill="none">
+      <rect x="8" y="16" width="56" height="40" rx="4" stroke="white" stroke-width="1.8"/>
+      <line x1="8" y1="26" x2="64" y2="26" stroke="white" stroke-width="1.8"/>
+      <line x1="20" y1="36" x2="52" y2="36" stroke="white" stroke-width="1.4"/>
+      <line x1="20" y1="44" x2="42" y2="44" stroke="white" stroke-width="1.4"/>
+      <circle cx="56" cy="54" r="8" stroke="#00C600" stroke-width="1.4"/>
+      <line x1="53" y1="54" x2="55" y2="56" stroke="#00C600" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="55" y1="56" x2="59" y2="52" stroke="#00C600" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <p>Cargá los archivos Excel para generar el reporte.<br><small style="opacity:.6">Los importes se recalculan automáticamente según las reglas de la macro.</small></p>
+  </div>
+
+  <!-- REPORT -->
+  <div id="report">
+    <div class="actions">
+      <button class="btn-reset" onclick="reset()">← Nueva consulta</button>
+      <button class="btn-pdf btn-pdf-mov" onclick="pdf(true, this)" style="background:rgba(16,54,226,0.7);color:#fff;font-weight:600;box-shadow:none">⬇ &nbsp;PDF con movimientos</button>
+      <button class="btn-pdf" onclick="pdf(false, this)">⬇ &nbsp;Descargar PDF</button>
+    </div>
+
+    <div id="rc">
+      <!-- HEADER -->
+      <div class="rhead">
+        <div>
+          <div class="rh-tag">Reporte de Cartera</div>
+          <div class="rh-name" id="rh-com">—</div>
+          <div class="rh-meta">
+            <span>Usuario &nbsp;<b id="rh-usr">—</b></span>
+            <span>Cuenta &nbsp;<b id="rh-cta">—</b></span>
+          </div>
+        </div>
+        <div class="rh-right">
+          <div class="rh-plabel">Período</div>
+          <div class="rh-pval" id="rh-per">—</div>
+          <div class="rh-sub" id="rh-gen">—</div>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab on" id="tb-usd" onclick="tab('usd')">💵 Dólares <span class="tpill up">USD</span></button>
+        <button class="tab ars-t" id="tb-ars" onclick="tab('ars')">🪙 Pesos <span class="tpill ap">ARS</span></button>
+      </div>
+
+      <!-- USD TAB -->
+      <div class="tc on" id="tc-usd">
+        <div class="rbody">
+          <div id="mn-usd"></div>
+          <div class="sgrid">
+            <div class="sc"><div class="sc-l">Portafolio Inicial</div><div class="sc-v" id="u-ini">—</div><div class="sc-s" id="u-ini-f">—</div></div>
+            <div class="sc"><div class="sc-l">Portafolio Final</div><div class="sc-v" id="u-fin">—</div><div class="sc-s" id="u-fin-f">—</div></div>
+            <div class="sc cg"><div class="sc-l">Resultado</div><div class="sc-v" id="u-res">—</div><div class="sc-s" id="u-res-l">—</div></div>
+            <div class="sc cg"><div class="sc-l">Variación %</div><div class="sc-v" id="u-var">—</div><div class="sc-s" id="u-var-s">—</div></div>
+          </div>
+          <div class="slabel">Distribución y Evolución</div>
+          <div class="cgrid">
+            <div class="cbox"><canvas id="ch-u-pie"></canvas></div>
+            <div class="cbox"><canvas id="ch-u-bar"></canvas></div>
+          </div>
+          <div class="slabel">Posición Final</div>
+          <div class="twrap">
+            <table class="ptable">
+              <thead><tr><th>Ticker</th><th>Especie</th><th class="r">Cantidad</th><th class="r">Precio</th><th class="r">Importe USD</th></tr></thead>
+              <tbody id="u-pos"></tbody>
+              <tfoot><tr><td colspan="4">Total Cartera USD</td><td id="u-tot">—</td></tr></tfoot>
+            </table>
+          </div>
+          <div class="mov-section" id="mov-section-usd" style="display:none">
+          <div class="slabel" style="margin-top:1.5rem">Movimientos del Período</div>
+          <div class="twrap">
+            <table class="mtable">
+              <thead><tr><th>Fecha</th><th>Operación</th><th>N° Ope.</th><th>Detalle</th><th class="r">Importe USD</th></tr></thead>
+              <tbody id="u-mov"></tbody>
+            </table>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARS TAB -->
+      <div class="tc ars-t" id="tc-ars">
+        <div class="rbody">
+          <div id="mn-ars"></div>
+          <div class="sgrid">
+            <div class="sc co"><div class="sc-l">Portafolio Inicial</div><div class="sc-v" id="a-ini">—</div><div class="sc-s" id="a-ini-f">—</div></div>
+            <div class="sc co"><div class="sc-l">Portafolio Final</div><div class="sc-v" id="a-fin">—</div><div class="sc-s" id="a-fin-f">—</div></div>
+            <div class="sc cg"><div class="sc-l">Resultado</div><div class="sc-v" id="a-res">—</div><div class="sc-s" id="a-res-l">—</div></div>
+            <div class="sc cg"><div class="sc-l">Variación %</div><div class="sc-v" id="a-var">—</div><div class="sc-s" id="a-var-s">—</div></div>
+          </div>
+          <div class="slabel">Distribución y Evolución</div>
+          <div class="cgrid">
+            <div class="cbox"><canvas id="ch-a-pie"></canvas></div>
+            <div class="cbox"><canvas id="ch-a-bar"></canvas></div>
+          </div>
+          <div class="slabel">Posición Final</div>
+          <div class="twrap">
+            <table class="ptable">
+              <thead><tr><th>Ticker</th><th>Especie</th><th class="r">Cantidad</th><th class="r">Precio</th><th class="r">Importe ARS</th></tr></thead>
+              <tbody id="a-pos"></tbody>
+              <tfoot><tr><td colspan="4">Total Cartera ARS</td><td id="a-tot">—</td></tr></tfoot>
+            </table>
+          </div>
+          <div class="mov-section" id="mov-section-ars" style="display:none">
+          <div class="slabel" style="margin-top:1.5rem">Movimientos del Período</div>
+          <div class="twrap">
+            <table class="mtable">
+              <thead><tr><th>Fecha</th><th>Operación</th><th>N° Ope.</th><th>Detalle</th><th class="r">Importe ARS</th></tr></thead>
+              <tbody id="a-mov"></tbody>
+            </table>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:0 2.5rem 1.5rem">
+        <div class="disc"><strong>Aviso:</strong> Este reporte es de carácter informativo y confidencial. S.E.U.O. — Salvo error u omisión. Los datos son de uso interno exclusivo y no constituyen asesoramiento de inversión. Los importes son recalculados automáticamente según criterios operativos internos (Res. CNV 731). Veta Capital — CNV ALyC N° 903 — Jerónimo Salguero 2745, Piso 3, CABA, Argentina.</div>
+      </div>
+      <div class="rfooter">
+        <div class="rf-brand"><span>VETA</span>CAP — vetacapital.com.ar</div>
+        <div class="rf-tag">El foco está en vos</div>
+      </div>
+    </div><!-- /rc -->
+  </div><!-- /report -->
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const S = { usd: null, ars: null };
+const CH = {};
+const VALIDOS = new Set(['COBR','CU$S','DETE','PAGO','PAU$','DETR','RTTR','RETE']);
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function cl(v) {
+  if (v === null || v === undefined) return '';
+  var s = String(v).trim();
+  if (s.charAt(0) === "'") s = s.slice(1).trim();
+  return s;
+}
+
+function num(s) {
+  if (s === null || s === undefined) return 0;
+  var raw = cl(String(s));
+  if (raw === '' || raw === 'NULL') return 0;
+  // Strip any leftover HTML
+  raw = raw.replace(/<[^>]+>/g, '').trim();
+  // Plain JS number
+  if (/^-?[0-9]+(\.[0-9]+)?$/.test(raw)) return parseFloat(raw) || 0;
+  // Argentine format: dot=thousands, comma=decimal
+  var cleaned = raw.replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleaned) || 0;
+}
+
+function fmtN(v, sym) {
+  return sym + Math.abs(v).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function fmtDate(s) {
+  if (!s) return '—';
+  var d = String(s).replace(/\s.*$/, '').trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    var p = d.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  return s;
+}
+
+// ─── DRAG / DROP ─────────────────────────────────────────────────────────────
+function dov(e, id) { e.preventDefault(); document.getElementById(id).classList.add('over'); }
+function dlv(id) { document.getElementById(id).classList.remove('over'); }
+function drp(e, t) { e.preventDefault(); dlv('dz-' + t); var f = e.dataTransfer.files[0]; if (f) proc(f, t); }
+function load(e, t) { var f = e.target.files[0]; if (f) proc(f, t); }
+
+// ─── READ FILE AS HTML TABLE ──────────────────────────────────────────────────
+// These .xls files are actually HTML tables with .xls extension
+// Parse them directly as HTML for clean data extraction
+function readAsHtmlTable(text) {
+  // Extract all <tr> blocks and their <td>/<th> cells
+  var rows = [];
+  var trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  var tdRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+  var trMatch;
+
+  while ((trMatch = trRe.exec(text)) !== null) {
+    var rowHtml = trMatch[1];
+    var cells = [];
+    var tdMatch;
+    while ((tdMatch = tdRe.exec(rowHtml)) !== null) {
+      var c = tdMatch[1];
+      // Strip all HTML tags
+      c = c.replace(/<[^>]+>/g, '');
+      // Decode HTML entities
+      c = c.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+      c = c.trim();
+      cells.push(c === '' || c === 'NULL' ? null : c);
+    }
+    // Only keep rows with at least one non-null cell
+    if (cells.some(function(c) { return c !== null; })) {
+      rows.push(cells);
+    }
+  }
+  return rows;
+}
+
+// ─── PROCESS FILE ────────────────────────────────────────────────────────────
+function proc(file, tipo) {
+  document.getElementById('fn-' + tipo).textContent = file.name;
+  document.getElementById('st-' + tipo).innerHTML = '';
+  document.getElementById('ht-' + tipo).textContent = 'Procesando...';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      // Decode file as text (these files are HTML despite .xls extension)
+      var bytes = new Uint8Array(e.target.result);
+      var text = new TextDecoder('utf-8').decode(bytes);
+
+      var rows;
+      // Check if it's an HTML file (starts with BOM + HTML, or <html>, or <div>)
+      var isHtml = text.trimStart().charAt(0) === '<' || text.indexOf('<table') >= 0 || text.indexOf('<tr') >= 0;
+
+      if (isHtml) {
+        // Parse as HTML table directly
+        rows = readAsHtmlTable(text);
+      } else {
+        // Fallback: try SheetJS for real xlsx files
+        var wb = XLSX.read(bytes, {type: 'array', raw: false, cellText: true});
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var raw2d = XLSX.utils.sheet_to_json(ws, {header: 1, defval: null, raw: false, blankrows: true});
+        rows = raw2d.map(function(row) {
+          if (!row) return [];
+          return row.map(function(cell) {
+            if (cell === null || cell === undefined) return null;
+            var v = String(cell).trim().replace(/<[^>]+>/g, '').trim();
+            if (v.charAt(0) === "'") v = v.slice(1).trim();
+            return v === '' ? null : v;
+          });
+        });
+      }
+
+      S[tipo] = parse(rows, tipo);
+
+      document.getElementById('dz-' + tipo).classList.add('ok');
+      document.getElementById('ic-' + tipo).textContent = '✅';
+      document.getElementById('ht-' + tipo).textContent = '';
+      document.getElementById('st-' + tipo).innerHTML = '<span class="badge ok">✓ Cargado y procesado</span>';
+      fill();
+      check();
+    } catch(err) {
+      document.getElementById('st-' + tipo).innerHTML = '<span class="badge err">✗ ' + err.message + '</span>';
+      document.getElementById('ht-' + tipo).textContent = '';
+      console.error('[VetaCap]', err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ─── PARSE + MACRO ───────────────────────────────────────────────────────────
+// HTML file row structure (0-indexed after filtering empty rows):
+// [0]: headers (Usuario, Comitente, Fecha Desde, Fecha Hasta...)
+// [1]: values  (DAVID SALEM, 48416, 01/01/2026, 18/03/2026...)
+// [2]: result row (null, Ganancia, TIR, TIR Anual, amount) -- cols shifted left vs xlsx
+// [3]: Portafolio inicial (null, 'Portafolio al...', null, null, amount)
+// [4]: Incremento/Decremento (null, label, null, null, amount)
+// [5]: Total Invertido
+// [6]: Portafolio final
+// [7]: Ticker header
+// [8..N]: initial positions
+// [N+1]: Posición al... total
+// [N+2]: Fecha/Operación header (movements)
+// [...]: movements
+// [M]: Incremento/Decremento total
+// [M+1]: Total Invertido
+// [M+2]: Ticker header (final positions)
+// [...]: final positions
+// [last]: Posición al... total
+
+function parse(rows, tipo) {
+  function g(r, c) {
+    if (!rows[r] || rows[r][c] === null || rows[r][c] === undefined) return '';
+    return cl(rows[r][c]);
+  }
+  function gall(r) {
+    if (!rows[r]) return [];
+    return rows[r];
+  }
+
+  // Header row [0]: Usuario, Comitente, Fecha Desde, Fecha Hasta
+  // Data row [1]: values
+  var usuario   = g(1, 0);
+  var comitente = g(1, 1);
+  var fDesde    = fmtDate(g(1, 2));
+  var fHasta    = fmtDate(g(1, 3));
+
+  // Scan all rows dynamically for key labels
+  var rowResult = -1, rowPortIni = -1, rowPortFin = -1;
+  var tickerRows = [];
+  var movHdr = -1;
+
+  for (var i = 0; i < rows.length; i++) {
+    var c0 = g(i, 0);
+    var c1 = g(i, 1);
+    // Result row: col1 = Ganancia/Perdida/Resultado
+    if (c1 === 'Ganancia' || c1 === 'Perdida' || c1 === 'Resultado') rowResult = i;
+    // Portafolio rows: col1 starts with 'Portafolio al'
+    if (c1.indexOf('Portafolio al') === 0) {
+      if (rowPortIni < 0) rowPortIni = i;
+      else rowPortFin = i;
+    }
+    // Also check col0 for portafolio (some rows have it in different position)
+    if (c0.indexOf('Posición al') === 0 && c1 !== '' && num(c1) > 0) {
+      // This is a total row like "Posición al 18/03/26 | 10.626,620"
+      if (rowPortFin < 0 && rowPortIni >= 0) rowPortFin = i;
+    }
+    // Ticker headers
+    if (c0 === 'Ticker') tickerRows.push(i);
+    // Movement header
+    if (c0 === 'Fecha' && c1.toLowerCase().indexOf('peraci') >= 0) movHdr = i;
+  }
+
+  // Read values: in HTML format, summary values are in col 4 (index 4)
+  // because columns are: [empty, label, null, null, value] -> after stripping empties: [label, null, null, value]
+  // Actually from our analysis: [null, 'Ganancia', 'T.I.R:...', 'T.I.R Anual...', '421,64']
+  var resultLabel = rowResult >= 0 ? g(rowResult, 1) : '';
+  var tirStr      = rowResult >= 0 ? g(rowResult, 2).replace('T.I.R:  ','').replace('T.I.R: ','').replace('T.I.R.: ','') : '';
+  var tirAnual    = rowResult >= 0 ? g(rowResult, 3).replace('T.I.R Anualizada:  ','').replace('T.I.R Anualizada: ','') : '';
+
+  // Portafolio values in col 4
+  var portIni = rowPortIni >= 0 ? (num(g(rowPortIni, 4)) || num(g(rowPortIni, 1))) : 0;
+  var portFin = rowPortFin >= 0 ? (num(g(rowPortFin, 4)) || num(g(rowPortFin, 1))) : 0;
+
+  // Also try the "Posición al" total rows which have value in col 1
+  for (var i = 0; i < rows.length; i++) {
+    var c0 = g(i, 0);
+    if (c0.indexOf('Posición al') === 0 && rows[i].length >= 2) {
+      var v = num(g(i, 1));
+      if (v > 0) {
+        if (portIni === 0 && portFin === 0) portIni = v;
+        else if (portIni > 0 && portFin === 0) portFin = v;
+      }
+    }
+  }
+
+  // Collect valid movements
+  var movs = [];
+  var removedCount = 0;
+  if (movHdr >= 0) {
+    for (var i = movHdr + 1; i < rows.length; i++) {
+      var op  = g(i, 1);
+      var det = g(i, 4);
+      var imp = num(g(i, 5));
+      if (!op) break;
+      if (op === 'Incremento/Decremento' || op === 'Total Invertido' || g(i,0).indexOf('Posici') >= 0) break;
+      // PASO 0
+      if (det.toUpperCase().indexOf('PAG3500') >= 0 || det.indexOf('ch') >= 0 || det.indexOf('Cobro caj val') >= 0) {
+        removedCount++; continue;
+      }
+      // PASO 2: válidas
+      if (VALIDOS.has(op)) {
+        movs.push({fecha: g(i, 0), op: op, nOpe: g(i, 2), det: det, imp: imp});
+      } else {
+        removedCount++;
+      }
+    }
+  }
+
+  // Recalculate
+  var incremento = movs.reduce(function(s, m) { return s + m.imp; }, 0);
+  var totalInv   = portIni + incremento;
+  var resultado  = portFin - totalInv;
+
+  // Initial positions (first Ticker block)
+  var posIni = [];
+  if (tickerRows.length > 0) {
+    for (var i = tickerRows[0] + 1; i < rows.length; i++) {
+      var t = g(i, 0);
+      if (!t || t.indexOf('Posici') >= 0 || t === 'Fecha') break;
+      posIni.push({ticker: t, nombre: g(i,1), cantidad: g(i,2), precio: g(i,3), importe: num(g(i,4))});
+    }
+  }
+
+  // Final positions (last Ticker block)
+  var posFin = [];
+  if (tickerRows.length > 0) {
+    var last = tickerRows[tickerRows.length - 1];
+    for (var i = last + 1; i < rows.length; i++) {
+      var t = g(i, 0);
+      if (!t || t.indexOf('Posici') >= 0 || t.charAt(0) === '*') break;
+      posFin.push({ticker: t, nombre: g(i,1), cantidad: g(i,2), precio: g(i,3), importe: num(g(i,4))});
+    }
+  }
+
+  return {usuario: usuario, comitente: comitente, fDesde: fDesde, fHasta: fHasta, tipo: tipo,
+    resultLabel: resultLabel, tirStr: tirStr, tirAnual: tirAnual,
+    portIni: portIni, portFin: portFin, incremento: incremento, totalInv: totalInv, resultado: resultado,
+    movs: movs, posIni: posIni, posFin: posFin, removedCount: removedCount};
+}
+
+// ─── UI HELPERS ──────────────────────────────────────────────────────────────
+function fill() {
+  var src = S.usd || S.ars;
+  if (!src) return;
+  document.getElementById('inp-com').value = src.comitente || '—';
+  document.getElementById('inp-per').value = src.fDesde + ' → ' + src.fHasta;
+}
+
+function check() {
+  document.getElementById('btn-gen').disabled = !(S.usd || S.ars);
+}
+
+// ─── GENERATE ────────────────────────────────────────────────────────────────
+function generar() {
+  document.getElementById('empty').style.display   = 'none';
+  document.getElementById('report').style.display  = 'none';
+  document.getElementById('loading').style.display = 'block';
+
+  setTimeout(function() {
+    document.getElementById('loading').style.display = 'none';
+    try {
+      var src = S.usd || S.ars;
+      document.getElementById('rh-com').textContent = 'Comitente ' + (src.comitente || '—');
+      document.getElementById('rh-usr').textContent = src.usuario || '—';
+      document.getElementById('rh-cta').textContent = src.comitente || '—';
+      document.getElementById('rh-per').textContent = src.fDesde + ' — ' + src.fHasta;
+      document.getElementById('rh-gen').textContent = 'Generado ' + new Date().toLocaleDateString('es-AR');
+
+      if (S.usd) { renderTab(S.usd, 'u', 'usd'); document.getElementById('tb-usd').style.display = 'flex'; }
+      else document.getElementById('tb-usd').style.display = 'none';
+
+      if (S.ars) { renderTab(S.ars, 'a', 'ars'); document.getElementById('tb-ars').style.display = 'flex'; }
+      else document.getElementById('tb-ars').style.display = 'none';
+
+      tab(S.usd ? 'usd' : 'ars');
+      document.getElementById('report').style.display = 'block';
+      document.getElementById('report').scrollIntoView({behavior: 'smooth'});
+    } catch(err) {
+      console.error('[VetaCap generar]', err);
+      document.getElementById('empty').style.display = 'block';
+      document.getElementById('empty').innerHTML = '<p style="color:#ff7b7b;text-align:center"><b>Error:</b> ' + err.message + '</p>';
+    }
+  }, 700);
+}
+
+// ─── RENDER TAB ──────────────────────────────────────────────────────────────
+function renderTab(d, p, m) {
+  var sym = m === 'usd' ? 'USD ' : 'ARS ';
+  var isPos = d.resultado >= 0;
+
+  var mn = document.getElementById('mn-' + m);
+  if (mn) mn.innerHTML = '';
+
+  document.getElementById(p + '-ini').textContent   = fmtN(d.portIni, sym);
+  document.getElementById(p + '-ini-f').textContent = d.fDesde;
+  document.getElementById(p + '-fin').textContent   = fmtN(d.portFin, sym);
+  document.getElementById(p + '-fin-f').textContent = d.fHasta;
+
+  var resEl = document.getElementById(p + '-res');
+  resEl.textContent = (isPos ? '+' : '-') + fmtN(d.resultado, sym);
+  resEl.style.color = isPos ? 'var(--green)' : 'var(--red)';
+  document.getElementById(p + '-res-l').textContent = d.resultLabel || (isPos ? 'Ganancia' : 'Pérdida');
+
+  // Variación porcentual
+  var variacion = d.totalInv > 0 ? (d.resultado / d.totalInv) * 100 : 0;
+  var varEl = document.getElementById(p + '-var');
+  if (varEl) {
+    varEl.textContent = (variacion >= 0 ? '+' : '') + variacion.toFixed(2) + '%';
+    varEl.style.color = variacion >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+  var varSubEl = document.getElementById(p + '-var-s');
+  if (varSubEl) varSubEl.textContent = 'Sobre total invertido';
+
+  var tbody = document.getElementById(p + '-pos');
+  var posHtml = '';
+  for (var i = 0; i < d.posFin.length; i++) {
+    var pos = d.posFin[i];
+    posHtml += '<tr><td><span class="tkpill">' + pos.ticker + '</span></td>' +
+      '<td>' + pos.nombre + '</td>' +
+      '<td class="r">' + pos.cantidad + '</td>' +
+      '<td class="r">' + pos.precio + '</td>' +
+      '<td class="r">' + pos.importe.toLocaleString('es-AR', {minimumFractionDigits:2}) + '</td></tr>';
+  }
+  tbody.innerHTML = posHtml || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem">Sin posiciones</td></tr>';
+
+  var total = d.posFin.reduce(function(s, x) { return s + x.importe; }, 0);
+  document.getElementById(p + '-tot').textContent = total.toLocaleString('es-AR', {minimumFractionDigits:2});
+
+  var movEl = document.getElementById(p + '-mov');
+  var movHtml = '';
+  for (var i = 0; i < d.movs.length; i++) {
+    var mv = d.movs[i];
+    var cls = mv.imp >= 0 ? 'rpos' : 'r';
+    movHtml += '<tr><td>' + mv.fecha + '</td><td>' + mv.op + '</td><td>' + mv.nOpe + '</td>' +
+      '<td>' + mv.det + '</td>' +
+      '<td class="' + cls + '">' + mv.imp.toLocaleString('es-AR', {minimumFractionDigits:2}) + '</td></tr>';
+  }
+  movEl.innerHTML = movHtml || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1.4rem;font-size:.8rem">Sin movimientos válidos en el período</td></tr>';
+
+  renderCharts(d, m, sym);
+}
+
+// ─── CHARTS ──────────────────────────────────────────────────────────────────
+var PAL = ['#1036E2','#00C600','#4B8BDE','#c6a000','#5b3bff','#0099ff','#ff6b6b','#ffd93d','#00e6b8','#e63946'];
+
+function renderCharts(d, m, sym) {
+  var posFin = d.posFin.filter(function(x) { return x.importe > 0; });
+  var ttl = posFin.reduce(function(s, x) { return s + x.importe; }, 0);
+  var pieId = 'ch-' + (m === 'usd' ? 'u' : 'a') + '-pie';
+  var barId = 'ch-' + (m === 'usd' ? 'u' : 'a') + '-bar';
+
+  if (CH[pieId]) CH[pieId].destroy();
+  CH[pieId] = new Chart(document.getElementById(pieId), {
+    type: 'doughnut',
+    data: {
+      labels: posFin.map(function(x) { return x.ticker; }),
+      datasets: [{data: posFin.map(function(x) { return x.importe; }), backgroundColor: PAL, borderWidth: 2, borderColor: 'rgba(2,23,81,.85)'}]
+    },
+    options: {responsive: true, plugins: {
+      legend: {position: 'bottom', labels: {color: 'rgba(255,255,255,.55)', font: {family:'Albert Sans',size:10}, padding:9, boxWidth:10}},
+      title:  {display: true, text: 'Composición de Cartera', color: 'rgba(255,255,255,.85)', font: {family:'Albert Sans',size:11,weight:'700'}, padding:{bottom:12}},
+      tooltip: {callbacks: {label: function(ctx) { return ctx.label + ': ' + fmtN(ctx.raw, sym) + ' (' + ((ctx.raw/ttl)*100).toFixed(1) + '%)'; }}}
+    }}
+  });
+
+  var skip = {Pesos: true, usd: true, 'u$s': true};
+  var top = d.posFin.filter(function(x) { return x.importe > 0 && !skip[x.ticker]; })
+    .sort(function(a,b) { return b.importe - a.importe; }).slice(0,7);
+  var iniMap = {};
+  d.posIni.forEach(function(x) { iniMap[x.ticker] = x.importe; });
+
+  if (CH[barId]) CH[barId].destroy();
+  CH[barId] = new Chart(document.getElementById(barId), {
+    type: 'bar',
+    data: {
+      labels: top.map(function(x) { return x.ticker; }),
+      datasets: [
+        {label:'Inicial', data:top.map(function(x){return iniMap[x.ticker]||0;}), backgroundColor:'rgba(16,54,226,.42)', borderRadius:5, barPercentage:.65},
+        {label:'Final',   data:top.map(function(x){return x.importe;}), backgroundColor: m==='usd'?'#1036E2':'#c6a000', borderRadius:5, barPercentage:.65}
+      ]
+    },
+    options: {responsive:true,
+      plugins:{
+        legend:{labels:{color:'rgba(255,255,255,.55)',font:{family:'Albert Sans',size:10}}},
+        title:{display:true,text:'Posición Inicial vs Final',color:'rgba(255,255,255,.85)',font:{family:'Albert Sans',size:11,weight:'700'},padding:{bottom:12}},
+        tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+fmtN(ctx.raw,sym);}}}
+      },
+      scales:{
+        y:{ticks:{color:'rgba(255,255,255,.38)',font:{family:'Albert Sans'}},grid:{color:'rgba(255,255,255,.05)'}},
+        x:{ticks:{color:'rgba(255,255,255,.55)',font:{family:'Albert Sans',size:10}},grid:{display:false}}
+      }
+    }
+  });
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function tab(t) {
+  ['usd','ars'].forEach(function(x) {
+    document.getElementById('tc-' + x).classList.toggle('on', x === t);
+    var btn = document.getElementById('tb-' + x);
+    btn.classList.toggle('on', x === t);
+    if (x === t && x === 'ars') btn.classList.add('ars-t');
+    else if (x === 'ars') btn.classList.remove('ars-t');
+  });
+}
+
+// ─── PDF ─────────────────────────────────────────────────────────────────────
+async function pdf(showMovimientos, btn) {
+  if (!btn) btn = document.querySelector('.btn-pdf');
+  btn.textContent = '⏳  Generando...';
+  // Show/hide movement sections before capture
+  var movSections = document.querySelectorAll('.mov-section');
+  movSections.forEach(function(el) { el.style.display = showMovimientos ? 'block' : 'none'; });
+  btn.disabled = true;
+  var jsPDF = window.jspdf.jsPDF;
+
+  var el = document.getElementById('rc');
+
+  // Capture at scale 2 for sharpness
+  var canvas = await html2canvas(el, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#021751',
+    logging: false
+  });
+
+  var img = canvas.toDataURL('image/png');
+
+  // Calculate canvas aspect ratio
+  var canvasW = canvas.width;
+  var canvasH = canvas.height;
+
+  // Use landscape if content is very tall, otherwise fit to A4 portrait
+  // Fit entire content into ONE page by using the content ratio to set page size
+  var a4w = 210; // mm
+  var imgH = (canvasH * a4w) / canvasW; // height in mm at A4 width
+
+  var doc;
+  if (imgH <= 297) {
+    // Fits in A4 portrait — use standard A4
+    doc = new jsPDF({orientation: 'p', unit: 'mm', format: 'a4'});
+    doc.addImage(img, 'PNG', 0, 0, a4w, imgH);
+  } else {
+    // Content is taller — create a custom page size that fits everything in one page
+    // Scale down to fit in A4 height (297mm) maintaining aspect ratio
+    var scale = 297 / imgH;
+    var scaledW = a4w * scale;
+    var scaledH = 297;
+    doc = new jsPDF({orientation: 'p', unit: 'mm', format: [scaledW, scaledH]});
+    doc.addImage(img, 'PNG', 0, 0, scaledW, scaledH);
+  }
+
+  var src = S.usd || S.ars;
+  var date = new Date().toISOString().split('T')[0].replace(/-/g,'');
+  doc.save('vetacap_' + (src.comitente||'reporte') + '_' + date + '.pdf');
+  btn.innerHTML = showMovimientos ? '⬇ &nbsp;PDF con movimientos' : '⬇ &nbsp;Descargar PDF';
+  btn.disabled = false;
+}
+
+// ─── RESET ───────────────────────────────────────────────────────────────────
+function reset() {
+  document.getElementById('report').style.display = 'none';
+  document.getElementById('empty').style.display  = 'block';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+</script>
+</body>
+</html>
